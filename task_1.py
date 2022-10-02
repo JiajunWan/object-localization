@@ -1,4 +1,5 @@
 import argparse
+from email.mime import image
 import os
 import shutil
 import time
@@ -137,9 +138,17 @@ def main():
 
     # TODO (Q1.1): define loss function (criterion) and optimizer from [1]
     # also use an LR scheduler to decay LR by 10 every 30 epochs
-    criterion = None
-    optimizer = None
-
+    # Binary Cross Entropy Loss
+    criterion = nn.BCEWithLogitsLoss()
+    # SGD
+    optimizer = torch.optim.SGD(model.parameters(),
+                                lr=args.lr,
+                                momentum=args.momentum,
+                                weight_decay=args.weight_decay)
+    # LR Step scheduler
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                step_size=30,
+                                                gamma=0.1)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -163,15 +172,18 @@ def main():
     # Ensure that the sizes are 512x512
     # Also ensure that data directories are correct
     # The ones use for testing by TAs might be different
-    train_dataset = None
-    val_dataset = None
-    train_sampler = None
+    train_dataset = VOCDataset(split='trainval',
+                               image_size=512)
+    val_dataset = VOCDataset(split='test',
+                             image_size=512)
+    train_sampler = None # test using a sampler
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=False,
+        shuffle=False, # test True
         num_workers=args.workers,
+        collate_fn=train_dataset.collate_fn, # use custom collate function
         pin_memory=True,
         sampler=train_sampler,
         drop_last=True)
@@ -190,6 +202,8 @@ def main():
 
     # TODO (Q1.3): Create loggers for wandb.
     # Ideally, use flags since wandb makes it harder to debug code.
+    if USE_WANDB:
+        wandb.init(project="vlr-hw1")
 
 
     for epoch in range(args.start_epoch, args.epochs):
@@ -197,20 +211,23 @@ def main():
         train(train_loader, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
-        if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
-            m1, m2 = validate(val_loader, model, criterion, epoch)
+        # if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
+        #     m1, m2 = validate(val_loader, model, criterion, epoch)
 
-            score = m1 * m2
-            # remember best prec@1 and save checkpoint
-            is_best = score > best_prec1
-            best_prec1 = max(score, best_prec1)
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
-                'optimizer': optimizer.state_dict(),
-            }, is_best)
+        #     score = m1 * m2
+        #     # remember best prec@1 and save checkpoint
+        #     is_best = score > best_prec1
+        #     best_prec1 = max(score, best_prec1)
+        #     save_checkpoint({
+        #         'epoch': epoch + 1,
+        #         'arch': args.arch,
+        #         'state_dict': model.state_dict(),
+        #         'best_prec1': best_prec1,
+        #         'optimizer': optimizer.state_dict(),
+        #     }, is_best)
+
+        # LR scheduler step
+        scheduler.step()
 
 
 # TODO: You can add input arguments if you wish
@@ -231,49 +248,59 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # TODO (Q1.1): Get inputs from the data dict
         # Convert inputs to cuda if training on GPU
-        target = None
+        # clear optimizer gradient
+        optimizer.zero_grad()
+        input = data[0].cuda()
+        target = data[1].cuda()
 
         # TODO (Q1.1): Get output from model
-        imoutput = None
+        output = model(input)
 
         # TODO (Q1.1): Perform any necessary operations on the output
 
         # TODO (Q1.1): Compute loss using ``criterion``
-        loss = None
+        loss = criterion(output, target)
 
         # measure metrics and record loss
-        m1 = metric1(imoutput.data, target)
-        m2 = metric2(imoutput.data, target)
+        # m1 = metric1(output.data, target)
+        # m2 = metric2(output.data, target)
         losses.update(loss.item(), input.size(0))
-        avg_m1.update(m1)
-        avg_m2.update(m2)
+        # avg_m1.update(m1)
+        # avg_m2.update(m2)
 
         # TODO (Q1.1): compute gradient and perform optimizer step
+        # backprop
+        loss.backward()
+        optimizer.step()
 
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
-            print('Epoch: [{0}][{1}/{2}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
-                  'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
-                      epoch,
-                      i,
-                      len(train_loader),
-                      batch_time=batch_time,
-                      data_time=data_time,
-                      loss=losses,
-                      avg_m1=avg_m1,
-                      avg_m2=avg_m2))
+        # if i % args.print_freq == 0:
+        #     print('Epoch: [{0}][{1}/{2}]\t'
+        #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+        #           'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+        #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+        #           'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
+        #           'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
+        #               epoch,
+        #               i,
+        #               len(train_loader),
+        #               batch_time=batch_time,
+        #               data_time=data_time,
+        #               loss=losses,
+        #               avg_m1=avg_m1,
+        #               avg_m2=avg_m2))
 
-        # TODO (Q1.3): Visualize/log things as mentioned in handout at appropriate intervals
+    # TODO (Q1.3): Visualize/log things as mentioned in handout at appropriate intervals
+    # logging the loss
+    if USE_WANDB:
+        wandb.log({'epoch': epoch + 1, 'train/loss': losses.avg})
+    print(losses.avg)
 
-        # End of train()
+    # End of train()
 
 
 def validate(val_loader, model, criterion, epoch=0):
@@ -290,19 +317,20 @@ def validate(val_loader, model, criterion, epoch=0):
 
         # TODO (Q1.1): Get inputs from the data dict
         # Convert inputs to cuda if training on GPU
-        target = None
+        input = data[0].cuda()
+        target = data[1].cuda()
 
         # TODO (Q1.1): Get output from model
-        imoutput = None
+        output = model(input)
 
         # TODO (Q1.1): Perform any necessary functions on the output
 
         # TODO (Q1.1): Compute loss using ``criterion``
-        loss = None
+        loss = criterion(output, target)
 
         # measure metrics and record loss
-        m1 = metric1(imoutput.data, target)
-        m2 = metric2(imoutput.data, target)
+        m1 = metric1(output.data, target)
+        m2 = metric2(output.data, target)
         losses.update(loss.item(), input.size(0))
         avg_m1.update(m1)
         avg_m2.update(m2)

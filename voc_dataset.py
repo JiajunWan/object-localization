@@ -173,3 +173,14 @@ class VOCDataset(Dataset):
         ret['gt_boxes'] = gt_boxes
         ret['gt_classes'] = gt_class_list
         return ret
+
+    def collate_fn(self, dict):
+        """
+        :param dict: a batch list of ret dictionary from __getitem__
+        :return: pytorch tensor of x and y
+        """
+        X = [x['image'] for x in dict]
+        Y = [y['label'] for y in dict]
+        X = torch.stack(X).to(torch.float32)
+        Y = torch.stack(Y).to(torch.float32)
+        return X, Y

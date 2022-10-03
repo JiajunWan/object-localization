@@ -6,6 +6,7 @@ import time
 
 import sklearn
 import sklearn.metrics
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -24,7 +25,7 @@ from AlexNet import localizer_alexnet, localizer_alexnet_robust
 from voc_dataset import *
 from utils import *
 
-USE_WANDB = False  # use flags, wandb is not convenient for debugging
+USE_WANDB = True  # use flags, wandb is not convenient for debugging
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
                      and callable(models.__dict__[name]))
@@ -193,6 +194,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
+        collate_fn=train_dataset.collate_fn, # use custom collate function
         pin_memory=True,
         drop_last=True)
 
@@ -211,8 +213,8 @@ def main():
         train(train_loader, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
-        # if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
-        #     m1, m2 = validate(val_loader, model, criterion, epoch)
+        if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
+            m1, m2 = validate(val_loader, model, criterion, epoch)
 
         #     score = m1 * m2
         #     # remember best prec@1 and save checkpoint
@@ -294,11 +296,12 @@ def train(train_loader, model, criterion, optimizer, epoch):
         #               avg_m1=avg_m1,
         #               avg_m2=avg_m2))
 
-    # TODO (Q1.3): Visualize/log things as mentioned in handout at appropriate intervals
-    # logging the loss
+        # TODO (Q1.3): Visualize/log things as mentioned in handout at appropriate intervals
+        # logging the loss
+        if USE_WANDB:
+            wandb.log({'train/loss': losses.avg})
     if USE_WANDB:
-        wandb.log({'epoch': epoch + 1, 'train/loss': losses.avg})
-    print(losses.avg)
+        wandb.log({'epoch': epoch + 1})
 
     # End of train()
 
@@ -329,31 +332,34 @@ def validate(val_loader, model, criterion, epoch=0):
         loss = criterion(output, target)
 
         # measure metrics and record loss
-        m1 = metric1(output.data, target)
-        m2 = metric2(output.data, target)
+        # m1 = metric1(output.data, target)
+        # m2 = metric2(output.data, target)
         losses.update(loss.item(), input.size(0))
-        avg_m1.update(m1)
-        avg_m2.update(m2)
+        # avg_m1.update(m1)
+        # avg_m2.update(m2)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
-            print('Test: [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
-                  'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
-                      i,
-                      len(val_loader),
-                      batch_time=batch_time,
-                      loss=losses,
-                      avg_m1=avg_m1,
-                      avg_m2=avg_m2))
+        # if i % args.print_freq == 0:
+        #     print('Test: [{0}/{1}]\t'
+        #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+        #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+        #           'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
+        #           'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
+        #               i,
+        #               len(val_loader),
+        #               batch_time=batch_time,
+        #               loss=losses,
+        #               avg_m1=avg_m1,
+        #               avg_m2=avg_m2))
 
         # TODO (Q1.3): Visualize things as mentioned in handout
         # TODO (Q1.3): Visualize at appropriate intervals
+        if USE_WANDB:
+            if i == 6 or i == 8:
+                log_heatmap(model, input[0], target[0])
 
 
     print(' * Metric1 {avg_m1.avg:.3f} Metric2 {avg_m2.avg:.3f}'.format(
@@ -399,6 +405,19 @@ def metric2(output, target):
 
     return [0]
 
+# TODO (Q1.3): Log headmaps
+def log_heatmap(model, input, target):
+    colormap = plt.get_cmap('jet')
+    original_image = tensor_to_PIL(input.cpu())
+    output = model.features(input)
+    output = model.classifier(output).cpu()
+    label = torch.where(target.cpu() == 1)
+    output = output[label[0][0], None, :, :]
+    output = torch.clamp(torch.sigmoid(output), 0, 1)
+    output = F.interpolate(output.reshape((1, 1, 29, 29)) * 255, size=(512, 512))
+    output = colormap(output.detach().numpy()).reshape((512, 512, -1))
+    heatmap = transforms.ToPILImage()(transforms.ToTensor()(output))
+    wandb.log({"Q1.3/heatmap": [wandb.Image(original_image), wandb.Image(heatmap)]})
 
 if __name__ == '__main__':
     main()

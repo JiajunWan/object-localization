@@ -421,9 +421,7 @@ def metric2(output, target):
     threshold = 0.5
     pred = (output > threshold).to(torch.int64).cpu()
     target = target.to(torch.int64).cpu()
-    # try 'macro'
-    # return sklearn.metrics.recall_score(target, pred, average='samples', zero_division=0)
-    return sklearn.metrics.recall_score(target, pred, average='macro', zero_division=0)
+    return sklearn.metrics.recall_score(target, pred, average='samples', zero_division=1)
 
 
 # Log heatmaps

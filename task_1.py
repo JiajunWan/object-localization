@@ -134,7 +134,7 @@ def main():
         model = localizer_alexnet_robust(pretrained=args.pretrained)
     print(model)
 
-    model.features = torch.nn.DataParallel(model.features)
+    # model.features = torch.nn.DataParallel(model.features)
     model.cuda()
 
     # TODO (Q1.1): define loss function (criterion) and optimizer from [1]
@@ -216,17 +216,17 @@ def main():
         if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
             m1, m2 = validate(val_loader, model, criterion, epoch)
 
-        #     score = m1 * m2
-        #     # remember best prec@1 and save checkpoint
-        #     is_best = score > best_prec1
-        #     best_prec1 = max(score, best_prec1)
-        #     save_checkpoint({
-        #         'epoch': epoch + 1,
-        #         'arch': args.arch,
-        #         'state_dict': model.state_dict(),
-        #         'best_prec1': best_prec1,
-        #         'optimizer': optimizer.state_dict(),
-        #     }, is_best)
+            score = m1 * m2
+            # remember best prec@1 and save checkpoint
+            is_best = score > best_prec1
+            best_prec1 = max(score, best_prec1)
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'best_prec1': best_prec1,
+                'optimizer': optimizer.state_dict(),
+            }, is_best)
 
         # LR scheduler step
         scheduler.step()
@@ -262,13 +262,14 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # TODO (Q1.1): Compute loss using ``criterion``
         loss = criterion(output, target)
+        output = torch.sigmoid(output)
 
         # measure metrics and record loss
-        # m1 = metric1(output.data, target)
-        # m2 = metric2(output.data, target)
+        m1 = metric1(output.data, target)
+        m2 = metric2(output.data, target)
         losses.update(loss.item(), input.size(0))
-        # avg_m1.update(m1)
-        # avg_m2.update(m2)
+        avg_m1.update(m1)
+        avg_m2.update(m2)
 
         # TODO (Q1.1): compute gradient and perform optimizer step
         # backprop
@@ -280,28 +281,28 @@ def train(train_loader, model, criterion, optimizer, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # if i % args.print_freq == 0:
-        #     print('Epoch: [{0}][{1}/{2}]\t'
-        #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-        #           'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-        #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-        #           'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
-        #           'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
-        #               epoch,
-        #               i,
-        #               len(train_loader),
-        #               batch_time=batch_time,
-        #               data_time=data_time,
-        #               loss=losses,
-        #               avg_m1=avg_m1,
-        #               avg_m2=avg_m2))
+        if i % args.print_freq == 0:
+            print('Epoch: [{0}][{1}/{2}]\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
+                  'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
+                      epoch,
+                      i,
+                      len(train_loader),
+                      batch_time=batch_time,
+                      data_time=data_time,
+                      loss=losses,
+                      avg_m1=avg_m1,
+                      avg_m2=avg_m2))
 
         # TODO (Q1.3): Visualize/log things as mentioned in handout at appropriate intervals
-        # logging the loss
+        # logging loss, metric1, and metric2
         if USE_WANDB:
-            wandb.log({'train/loss': losses.avg})
-    if USE_WANDB:
-        wandb.log({'epoch': epoch + 1})
+            wandb.log({'train/loss': losses.val,
+                       'train/metric1': avg_m1.val,
+                       'train/metric2': avg_m2.val})
 
     # End of train()
 
@@ -330,36 +331,42 @@ def validate(val_loader, model, criterion, epoch=0):
 
         # TODO (Q1.1): Compute loss using ``criterion``
         loss = criterion(output, target)
+        output = torch.sigmoid(output)
 
         # measure metrics and record loss
-        # m1 = metric1(output.data, target)
-        # m2 = metric2(output.data, target)
+        m1 = metric1(output.data, target)
+        m2 = metric2(output.data, target)
         losses.update(loss.item(), input.size(0))
-        # avg_m1.update(m1)
-        # avg_m2.update(m2)
+        avg_m1.update(m1)
+        avg_m2.update(m2)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # if i % args.print_freq == 0:
-        #     print('Test: [{0}/{1}]\t'
-        #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-        #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-        #           'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
-        #           'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
-        #               i,
-        #               len(val_loader),
-        #               batch_time=batch_time,
-        #               loss=losses,
-        #               avg_m1=avg_m1,
-        #               avg_m2=avg_m2))
+        if i % args.print_freq == 0:
+            print('Test: [{0}/{1}]\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                  'Metric1 {avg_m1.val:.3f} ({avg_m1.avg:.3f})\t'
+                  'Metric2 {avg_m2.val:.3f} ({avg_m2.avg:.3f})'.format(
+                      i,
+                      len(val_loader),
+                      batch_time=batch_time,
+                      loss=losses,
+                      avg_m1=avg_m1,
+                      avg_m2=avg_m2))
 
         # TODO (Q1.3): Visualize things as mentioned in handout
         # TODO (Q1.3): Visualize at appropriate intervals
         if USE_WANDB:
-            if i == 6 or i == 8:
-                log_heatmap(model, input[0], target[0])
+            if epoch + 1 in [1, 15, 30]:
+                if i == 7 or i == 15:
+                    log_heatmap(model, input[0], target[0])
+    # TODO (Q1.6): plot the mean validation metric1 and mean validation metric2
+    if USE_WANDB:
+        wandb.log({'val/metric1': avg_m1.avg,
+                   'val/metric2': avg_m2.avg})
 
 
     print(' * Metric1 {avg_m1.avg:.3f} Metric2 {avg_m2.avg:.3f}'.format(
@@ -396,28 +403,42 @@ class AverageMeter(object):
 
 def metric1(output, target):
     # TODO (Q1.5): compute metric1
-
-    return [0]
+    total = 0
+    num_classes = 0
+    output = output.cpu()
+    target = target.cpu()
+    for i in range(20):
+        if sum(target[:, i]) == 0:
+            continue
+        total += sklearn.metrics.average_precision_score(target[:, i], output[:, i])
+        num_classes += 1
+    return total / num_classes
 
 
 def metric2(output, target):
     # TODO (Q1.5): compute metric2
+    # tune threshold
+    threshold = 0.5
+    pred = (output > threshold).to(torch.int64).cpu()
+    target = target.to(torch.int64).cpu()
+    # try 'macro'
+    # return sklearn.metrics.recall_score(target, pred, average='samples', zero_division=0)
+    return sklearn.metrics.recall_score(target, pred, average='macro', zero_division=0)
 
-    return [0]
 
-# TODO (Q1.3): Log headmaps
+# Log heatmaps
 def log_heatmap(model, input, target):
-    colormap = plt.get_cmap('jet')
+    colormap = plt.get_cmap('jet').reversed()
     original_image = tensor_to_PIL(input.cpu())
     output = model.features(input)
     output = model.classifier(output).cpu()
     label = torch.where(target.cpu() == 1)
     output = output[label[0][0], None, :, :]
-    output = torch.clamp(torch.sigmoid(output), 0, 1)
-    output = F.interpolate(output.reshape((1, 1, 29, 29)) * 255, size=(512, 512))
+    output = torch.sigmoid(output)
+    output = transforms.Resize((512, 512))(output) * 255
     output = colormap(output.detach().numpy()).reshape((512, 512, -1))
     heatmap = transforms.ToPILImage()(transforms.ToTensor()(output))
-    wandb.log({"Q1.3/heatmap": [wandb.Image(original_image), wandb.Image(heatmap)]})
+    wandb.log({"heatmap": [wandb.Image(original_image), wandb.Image(heatmap)]})
 
 if __name__ == '__main__':
     main()

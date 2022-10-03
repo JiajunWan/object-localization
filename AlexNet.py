@@ -71,10 +71,13 @@ def localizer_alexnet(pretrained=False, **kwargs):
     if pretrained:
         state_dict = {k: v for k, v in torch.load('alexnet-owt-4df8aa71.pth').items() if 'features' in k}
         model.load_state_dict(state_dict, strict=False)
+    for param in model.features.parameters():
+        param.requires_grad = True
     # xavier init
     for layer in model.classifier:
         if type(layer) == nn.Conv2d:
             nn.init.xavier_uniform_(layer.weight)
+            nn.init.constant_(layer.bias, 0)
     return model
 
 

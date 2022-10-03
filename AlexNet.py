@@ -32,7 +32,6 @@ class LocalizerAlexNet(nn.Module):
             nn.Conv2d(256, 256, kernel_size=(1, 1), stride=(1, 1)),
             nn.ReLU(),
             nn.Conv2d(256, num_classes, kernel_size=(1, 1), stride=(1, 1)),
-            nn.ReLU(),
         )
         self.pool = nn.Sequential(
             nn.MaxPool2d(kernel_size=(29, 29)),

@@ -34,7 +34,7 @@ class LocalizerAlexNet(nn.Module):
             nn.Conv2d(256, num_classes, kernel_size=(1, 1), stride=(1, 1)),
         )
         self.pool = nn.Sequential(
-            nn.MaxPool2d(kernel_size=(29, 29)),
+            nn.AdaptiveMaxPool2d((1, 1)),
             nn.Flatten(),
         )
 
@@ -51,11 +51,37 @@ class LocalizerAlexNetRobust(nn.Module):
     def __init__(self, num_classes=20):
         super(LocalizerAlexNetRobust, self).__init__()
         # TODO (Q1.7): Define model
-
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=(11, 11), stride=(4, 4), padding=(2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(64, 192, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), dilation=(1, 1), ceil_mode=False),
+            nn.Conv2d(192, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(384, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+        )
+        self.classifier = nn.Sequential(
+            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=(1, 1), stride=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, num_classes, kernel_size=(1, 1), stride=(1, 1)),
+        )
+        self.pool = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+        )
 
     def forward(self, x):
         # TODO (Q1.7): Define forward pass
-
+        x = self.features(x)
+        x = self.classifier(x)
+        x = self.pool(x)
         return x
 
 
@@ -90,5 +116,14 @@ def localizer_alexnet_robust(pretrained=False, **kwargs):
     """
     model = LocalizerAlexNetRobust(**kwargs)
     # TODO (Q1.7): Initialize weights based on whether it is pretrained or not
-
+    if pretrained:
+        state_dict = {k: v for k, v in torch.load('alexnet-owt-4df8aa71.pth').items() if 'features' in k}
+        model.load_state_dict(state_dict, strict=False)
+    for param in model.features.parameters():
+        param.requires_grad = True
+    # xavier init
+    for layer in model.classifier:
+        if type(layer) == nn.Conv2d:
+            nn.init.xavier_uniform_(layer.weight)
+            nn.init.constant_(layer.bias, 0)
     return model

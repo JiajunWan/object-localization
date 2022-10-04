@@ -213,7 +213,7 @@ def main():
         train(train_loader, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
-        if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
+        if epoch % args.eval_freq == 0 or epoch == args.epochs - 1 or epoch == 29:
             m1, m2 = validate(val_loader, model, criterion, epoch)
 
             score = m1 * m2
@@ -360,9 +360,11 @@ def validate(val_loader, model, criterion, epoch=0):
         # TODO (Q1.3): Visualize things as mentioned in handout
         # TODO (Q1.3): Visualize at appropriate intervals
         if USE_WANDB:
-            if epoch + 1 in [1, 15, 30]:
-                if i == 7 or i == 15:
+            if epoch in [0, 14, 29, 44]:
+                if i == 21 or i == 38:
                     log_heatmap(model, input[0], target[0])
+            # if i == 47 or i == 85 or i == 87:
+            #     log_heatmap(model, input[0], target[0])
     # TODO (Q1.6): plot the mean validation metric1 and mean validation metric2
     if USE_WANDB:
         wandb.log({'val/metric1': avg_m1.avg,
@@ -421,7 +423,7 @@ def metric2(output, target):
     threshold = 0.5
     pred = (output > threshold).to(torch.int64).cpu()
     target = target.to(torch.int64).cpu()
-    return sklearn.metrics.recall_score(target, pred, average='samples', zero_division=1)
+    return sklearn.metrics.recall_score(target, pred, average='samples', zero_division=0)
 
 
 # Log heatmaps
@@ -437,6 +439,7 @@ def log_heatmap(model, input, target):
     output = colormap(output.detach().numpy()).reshape((512, 512, -1))
     heatmap = transforms.ToPILImage()(transforms.ToTensor()(output))
     wandb.log({"heatmap": [wandb.Image(original_image), wandb.Image(heatmap)]})
+
 
 if __name__ == '__main__':
     main()

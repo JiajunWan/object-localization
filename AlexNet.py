@@ -41,6 +41,7 @@ class LocalizerAlexNet(nn.Module):
 
     def forward(self, x):
         # TODO (Q1.1): Define forward pass
+        # forward propagation
         x = self.features(x)
         x = self.classifier(x)
         x = self.pool(x)
@@ -51,6 +52,7 @@ class LocalizerAlexNetRobust(nn.Module):
     def __init__(self, num_classes=20):
         super(LocalizerAlexNetRobust, self).__init__()
         # TODO (Q1.7): Define model
+        # AlexNet fueature extractor layers
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=(11, 11), stride=(4, 4), padding=(2, 2)),
             nn.ReLU(),
@@ -65,6 +67,7 @@ class LocalizerAlexNetRobust(nn.Module):
             nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
             nn.ReLU(),
         )
+        # our own classifier layers
         self.classifier = nn.Sequential(
             nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1)),
             nn.ReLU(),
@@ -72,6 +75,7 @@ class LocalizerAlexNetRobust(nn.Module):
             nn.ReLU(),
             nn.Conv2d(256, num_classes, kernel_size=(1, 1), stride=(1, 1)),
         )
+        # final global max pooling layers
         self.pool = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
@@ -98,7 +102,7 @@ def localizer_alexnet(pretrained=False, **kwargs):
         state_dict = {k: v for k, v in torch.load('alexnet-owt-4df8aa71.pth').items() if 'features' in k}
         model.load_state_dict(state_dict, strict=False)
     for param in model.features.parameters():
-        param.requires_grad = True
+        param.requires_grad = False
     # xavier init
     for layer in model.classifier:
         if type(layer) == nn.Conv2d:

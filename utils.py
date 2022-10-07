@@ -19,7 +19,25 @@ def nms(bounding_boxes, confidence_score, threshold=0.05):
 
     return: list of bounding boxes and scores
     """
-    boxes, scores = None, None
+    pairs = [x for x in list(zip(confidence_score, bounding_boxes)) if x[0] > threshold]
+    pairs = sorted(pairs, key=lambda x: x[0], reverse=True)
+    boxes, scores = [], []
+    visited = set()
+    while len(visited) < len(pairs):
+        idx = 0
+        for i in range(len(pairs)):
+            if i in visited:
+                continue
+            idx = i
+            break
+        boxes.append(pairs[idx][1])
+        scores.append(pairs[idx][0])
+        visited.add(idx)
+        for i in range(len(pairs)):
+            if i in visited:
+                continue
+            if iou(pairs[idx][1], pairs[i][1]) > 0.3:
+                visited.add(i)
 
     return boxes, scores
 
@@ -30,7 +48,18 @@ def iou(box1, box2):
     Calculates Intersection over Union for two bounding boxes (xmin, ymin, xmax, ymax)
     returns IoU vallue
     """
+    x_left = max(box1[0], box2[0]) 
+    y_top = max(box1[1], box2[1])
+    x_right = min(box1[2], box2[2])
+    y_bottom = min(box1[3], box2[3])
 
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+
+    intersection = (x_right - x_left) * (y_bottom - y_top)
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    iou = intersection / (area1 + area2 - intersection)
     return iou
 
 

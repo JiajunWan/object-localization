@@ -173,16 +173,18 @@ def main():
     # Ensure that the sizes are 512x512
     # Also ensure that data directories are correct
     # The ones use for testing by TAs might be different
+    # create train and validation dataset
     train_dataset = VOCDataset(split='trainval',
                                image_size=512)
     val_dataset = VOCDataset(split='test',
                              image_size=512)
-    train_sampler = None # test using a sampler
+    train_sampler = None
 
+    # create train and validation dataloader with custom collate function
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=False, # test True
+        shuffle=False,
         num_workers=args.workers,
         collate_fn=train_dataset.collate_fn, # use custom collate function
         pin_memory=True,
@@ -194,7 +196,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        collate_fn=train_dataset.collate_fn, # use custom collate function
+        collate_fn=val_dataset.collate_fn, # use custom collate function
         pin_memory=True,
         drop_last=True)
 
@@ -214,7 +216,8 @@ def main():
 
         # evaluate on validation set
         if epoch % args.eval_freq == 0 or epoch == args.epochs - 1 or epoch == 29:
-            m1, m2 = validate(val_loader, model, criterion, epoch)
+            with torch.no_grad():
+                m1, m2 = validate(val_loader, model, criterion, epoch)
 
             score = m1 * m2
             # remember best prec@1 and save checkpoint
@@ -262,6 +265,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # TODO (Q1.1): Compute loss using ``criterion``
         loss = criterion(output, target)
+        # sigmoid on each element to enforce probability from 0 to 1
         output = torch.sigmoid(output)
 
         # measure metrics and record loss
@@ -331,6 +335,7 @@ def validate(val_loader, model, criterion, epoch=0):
 
         # TODO (Q1.1): Compute loss using ``criterion``
         loss = criterion(output, target)
+        # sigmoid on each element to enforce probability from 0 to 1
         output = torch.sigmoid(output)
 
         # measure metrics and record loss
@@ -361,10 +366,10 @@ def validate(val_loader, model, criterion, epoch=0):
         # TODO (Q1.3): Visualize at appropriate intervals
         if USE_WANDB:
             if epoch in [0, 14, 29, 44]:
-                if i == 21 or i == 38:
+                if i == 21 or i == 37:
                     log_heatmap(model, input[0], target[0])
-            # if i == 47 or i == 85 or i == 87:
-            #     log_heatmap(model, input[0], target[0])
+            if epoch == args.epochs - 1 and (i == 47 or i == 85 or i == 87):
+                log_heatmap(model, input[0], target[0])
     # TODO (Q1.6): plot the mean validation metric1 and mean validation metric2
     if USE_WANDB:
         wandb.log({'val/metric1': avg_m1.avg,

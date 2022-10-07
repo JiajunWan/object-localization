@@ -160,6 +160,7 @@ class VOCDataset(Dataset):
             3. Make sure to return only the top_n proposals based on proposal confidence ("boxScores")!
             4. You may have to write a custom collate_fn since some of the attributes below may be variable in number for each data point
         """
+        # get array of (boxScore, boxes) tuples and sort by boxScore
         score_bbox_pairs = sorted(list(zip(self.roi_data['boxScores'][0][index][:, 0], self.roi_data['boxes'][0][index])), key=lambda x: x[0], reverse=True)[:self.top_n]
         # convert proposal to [xmin, ymin, xmax, ymax], same as gt_boxes
         proposals = np.asarray(list(map(lambda x: np.array([x[1][1] / width, x[1][0] / height, x[1][3] / width, x[1][2] / height]), score_bbox_pairs))).astype(np.float32)
@@ -179,6 +180,7 @@ class VOCDataset(Dataset):
         :param dict: a batch list of ret dictionary from __getitem__
         :return: pytorch tensor of x and y
         """
+        # extract input image and target label from dictionary and convert to pytorch single precision float tensor
         X = [x['image'] for x in dict]
         Y = [y['label'] for y in dict]
         X = torch.stack(X).to(torch.float32)

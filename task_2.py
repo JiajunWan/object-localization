@@ -17,6 +17,7 @@ from voc_dataset import *
 import wandb
 from utils import nms, tensor_to_PIL
 from PIL import Image, ImageDraw
+from tqdm import tqdm
 
 
 # hyper-parameters
@@ -26,55 +27,55 @@ parser.add_argument(
     '--lr',
     default=0.0001,
     type=float,
-    description='Learning rate'
+    help='Learning rate'
 )
 parser.add_argument(
     '--lr-decay-steps',
-    default=150000,
+    default=15000,
     type=int,
-    description='Interval at which the lr is decayed'
+    help='Interval at which the lr is decayed'
 )
 parser.add_argument(
     '--lr-decay',
-    default=0.1,
+    default=0.5,
     type=float,
-    description='Decay rate of lr'
+    help='Decay rate of lr'
 )
 parser.add_argument(
     '--momentum',
     default=0.9,
     type=float,
-    description='Momentum of optimizer'
+    help='Momentum of optimizer'
 )
 parser.add_argument(
     '--weight-decay',
     default=0.0005,
     type=float,
-    description='Weight decay'
+    help='Weight decay'
 )
 parser.add_argument(
     '--epochs',
-    default=5,
+    default=6,
     type=int,
-    description='Number of epochs'
+    help='Number of epochs'
 )
 parser.add_argument(
     '--val-interval',
     default=5000,
     type=int,
-    description='Interval at which to perform validation'
+    help='Interval at which to perform validation'
 )
 parser.add_argument(
     '--disp-interval',
     default=10,
     type=int,
-    description='Interval at which to perform visualization'
+    help='Interval at which to perform visualization'
 )
 parser.add_argument(
     '--use-wandb',
     default=False,
     type=bool,
-    description='Flag to enable visualization'
+    help='Flag to enable visualization'
 )
 # ------------
 
@@ -96,6 +97,7 @@ def calculate_map():
     """
     # TODO (Q2.3): Calculate mAP on test set.
     # Feel free to write necessary function parameters.
+    # sklearn.metrics.auc(recalls, precisions)
     pass
 
 
@@ -104,9 +106,9 @@ def test_model(model, val_loader=None, thresh=0.05):
     Tests the networks and visualizes the detections
     :param thresh: Confidence threshold
     """
+    res = []
     with torch.no_grad():
-        for iter, data in enumerate(val_loader):
-
+        for iter, data in tqdm(enumerate(val_loader), total=len(VOCDataset(split='test'))):
             # one batch = data for one image
             image = data['image']
             target = data['label']
@@ -116,17 +118,25 @@ def test_model(model, val_loader=None, thresh=0.05):
             gt_class_list = data['gt_classes']
 
             # TODO (Q2.3): perform forward pass, compute cls_probs
+            image = image.cuda()
+            target = target.cuda()
+            rois = torch.squeeze(rois)
+            rois = rois.cuda()
+            cls_prob = model(image, [rois], target)
 
 
             # TODO (Q2.3): Iterate over each class (follow comments)
+            pred = []
             for class_num in range(20):
                 # get valid rois and cls_scores based on thresh
-
                 # use NMS to get boxes and scores
-                pass
+                boxes, scores = nms(rois.cpu(), cls_prob[:, class_num].cpu(), thresh)
+                if boxes and scores:
+                    pred.append([boxes, scores, class_num])
+            res.append([pred, gt_boxes, gt_class_list])
 
             # TODO (Q2.3): visualize bounding box predictions when required
-            calculate_map()
+            # calculate_map()
 
 
 def train_model(model, train_loader=None, val_loader=None, optimizer=None, args=None):
@@ -134,11 +144,14 @@ def train_model(model, train_loader=None, val_loader=None, optimizer=None, args=
     Trains the network, runs evaluation and visualizes the detections
     """
     # Initialize training variables
-    train_loss = 0
-    step_cnt = 0
+    # LR Step scheduler
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                step_size=args.lr_decay_steps,
+                                                gamma=args.lr_decay)
     for epoch in range(args.epochs):
-        for iter, data in enumerate(train_loader):
-
+        train_loss = 0
+        step_cnt = 0
+        for iter, data in tqdm(enumerate(train_loader), total=len(VOCDataset(split='trainval'))):
             # TODO (Q2.2): get one batch and perform forward pass
             # one batch = data for one image
             image = data['image']
@@ -151,6 +164,11 @@ def train_model(model, train_loader=None, val_loader=None, optimizer=None, args=
             # TODO (Q2.2): perform forward pass
             # take care that proposal values should be in pixels
             # Convert inputs to cuda if training on GPU
+            image = image.cuda()
+            target = target.cuda()
+            rois = torch.squeeze(rois)
+            rois = rois.cuda()
+            cls_prob = model(image, [rois], target)
 
 
             # backward pass and update
@@ -161,6 +179,7 @@ def train_model(model, train_loader=None, val_loader=None, optimizer=None, args=
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             # TODO (Q2.2): evaluate the model every N iterations (N defined in handout)
             # Add wandb logging wherever necessary
@@ -172,6 +191,10 @@ def train_model(model, train_loader=None, val_loader=None, optimizer=None, args=
 
             # TODO (Q2.4): Perform all visualizations here
             # The intervals for different things are defined in the handout
+        print(f'train_loss_sum: {train_loss}')
+        print(f'train_loss_avg: {train_loss / step_cnt}')
+        for param_group in optimizer.param_groups:
+            print(f"lr: {param_group['lr']}")
 
     # TODO (Q2.4): Plot class-wise APs
 
@@ -183,14 +206,16 @@ def main():
     args = parser.parse_args()
     # TODO (Q2.2): Load datasets and create dataloaders
     # Initialize wandb logger
-    train_dataset = None
-    val_dataset = None
+    train_dataset = VOCDataset(split='trainval',
+                               image_size=512)
+    val_dataset = VOCDataset(split='test',
+                             image_size=512)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=1,   # batchsize is one for this implementation
         shuffle=True,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         sampler=None,
         drop_last=True)
@@ -199,7 +224,7 @@ def main():
         val_dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         drop_last=True)
 
@@ -235,9 +260,16 @@ def main():
     net.train()
 
     # TODO (Q2.2): Freeze AlexNet layers since we are loading a pretrained model
+    for param in net.features.parameters():
+        param.requires_grad = False
 
     # TODO (Q2.2): Create optimizer only for network parameters that are trainable
-    optimizer = None
+    optimizer = torch.optim.SGD(net.parameters(),
+                                lr=args.lr,
+                                momentum=args.momentum,
+                                weight_decay=args.weight_decay)
 
     # Training
-    train_model(net, train_loader, optimizer, args)
+    train_model(net, train_loader, val_loader, optimizer, args)
+
+main()

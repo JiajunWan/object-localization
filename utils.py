@@ -19,23 +19,29 @@ def nms(bounding_boxes, confidence_score, threshold=0.05):
 
     return: list of bounding boxes and scores
     """
+    # sort bounding boxes based on confidence score
     pairs = [x for x in list(zip(confidence_score, bounding_boxes)) if x[0] > threshold]
     pairs = sorted(pairs, key=lambda x: x[0], reverse=True)
     boxes, scores = [], []
     visited = set()
+    # loop to visit all bounding boxes
     while len(visited) < len(pairs):
         idx = 0
+        # get the first index that is not visited before
         for i in range(len(pairs)):
             if i in visited:
                 continue
             idx = i
             break
+        # add this bounding box to output list
         boxes.append(pairs[idx][1])
         scores.append(pairs[idx][0])
         visited.add(idx)
+        # loop over other bounding boxes to remove overlapping bboxes
         for i in range(len(pairs)):
             if i in visited:
                 continue
+            # ignore overlapping bboxes with iou > 0.3
             if iou(pairs[idx][1], pairs[i][1]) > 0.3:
                 visited.add(i)
 
@@ -48,17 +54,21 @@ def iou(box1, box2):
     Calculates Intersection over Union for two bounding boxes (xmin, ymin, xmax, ymax)
     returns IoU vallue
     """
+    # get the boarder coordiantes of union of two bboxes
     x_left = max(box1[0], box2[0]) 
     y_top = max(box1[1], box2[1])
     x_right = min(box1[2], box2[2])
     y_bottom = min(box1[3], box2[3])
 
+    # area is zero if two bboxes cannot be unioned
     if x_right < x_left or y_bottom < y_top:
         return 0.0
 
+    # calculate intersection area
     intersection = (x_right - x_left) * (y_bottom - y_top)
     area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
     area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    # iou is intersection divided by union (addition of areas of two bboxes minus intersection)
     iou = intersection / (area1 + area2 - intersection)
     return iou
 
